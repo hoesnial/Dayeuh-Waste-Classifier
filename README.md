@@ -1,1 +1,1 @@
-# Project-Pengolahan-Citra
+# Ini adalah Project Pratikum Pengolahan Citra Digital 
