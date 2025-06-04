@@ -31,6 +31,4 @@ Tujuan dari proyek ini adalah untuk membangun sebuah sistem klasifikasi objek pa
 
 - Mengembangkan pipeline sederhana namun efektif untuk sistem klasifikasi citra berbasis pembelajaran mesin.
 
-- Menunjukkan integrasi antara Computer Vision (OpenCV) dan Machine Learning (SVM) dalam satu aplikasi.
-
 - Memberikan antarmuka interaktif yang memungkinkan pengguna memilih area objek secara manual (ROI) untuk analisis langsung.
