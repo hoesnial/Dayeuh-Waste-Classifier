@@ -4,7 +4,7 @@ Program ini melakukan deteksi dan klasifikasi objek berdasarkan fitur warna, ben
 
 ---
 ## Kelompok C2 
-- 152023088 Muhamad Husni (Ketua)
+- 152023088 Muhamad Husni 
 - 152023114 Rizal Shiddieq
 - 152023172 SAEPPUDIN
 
