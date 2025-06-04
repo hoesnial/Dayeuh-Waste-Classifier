@@ -5,5 +5,7 @@ Program ini melakukan deteksi dan klasifikasi objek berdasarkan fitur warna, ben
 Program akan melakukan:
 
 Ekstraksi fitur warna
+
 Ekstraksi fitur bentuk
+
 Ekstraksi fitur tekstur
