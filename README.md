@@ -2,10 +2,11 @@
 
 Program ini melakukan deteksi dan klasifikasi objek berdasarkan fitur warna, bentuk, dan tekstur dari area yang dipilih pada citra menggunakan model machine learning (SVM atau lainnya) yang telah dilatih sebelumnya.
 
-Program akan melakukan:
+Fitur Utama
+Ekstraksi fitur warna (mean RGB)
 
-Ekstraksi fitur warna
+Ekstraksi fitur bentuk (area, perimeter, circularity)
 
-Ekstraksi fitur bentuk
+Ekstraksi fitur tekstur (fitur Haralick)
 
-Ekstraksi fitur tekstur
+Klasifikasi citra menggunakan model SVM terlatih
