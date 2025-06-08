@@ -3,7 +3,24 @@
 Program ini melakukan deteksi dan klasifikasi objek berdasarkan fitur warna, bentuk, dan tekstur dari area yang dipilih pada citra menggunakan model machine learning (SVM atau lainnya) yang telah dilatih sebelumnya.
 
 ---
-## ☠️ Kelompok C2 
+
+## 🔧 Cara Penggunaan 
+```
+// Cloning peroject nya
+
+git clone https://github.com/hoesnial/Dayeuh-Waste-Classifier.git
+```
+```
+// Install Library-library yang akan digunakan satu persatu
+
+pip install opencv-python
+pip install matplotlib
+pip install scikit-image
+pip install numpy
+pip instakk pandas
+```
+---
+## 👩‍👧‍👦 Kelompok C2 
 - 152023088 Muhamad Husni 
 - 152023114 Rizal Shiddieq
 - 152023172 SAEPPUDIN
