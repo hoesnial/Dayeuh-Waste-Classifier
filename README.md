@@ -36,11 +36,6 @@ pip instakk pandas
 
 ---
 
-## 🎰 (Opsional) Metode Marchine Learning
-- Klasifikasi citra menggunakan model SVM dan RFC
-
----
-
 ## 🎯 Tujuan Project
 Tujuan dari proyek ini adalah untuk membangun sebuah sistem klasifikasi objek pada citra gambar berbasis ekstraksi fitur warna, bentuk, dan tekstur, yang dapat digunakan untuk:
 
