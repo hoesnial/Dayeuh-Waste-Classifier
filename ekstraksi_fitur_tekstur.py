@@ -1,10 +1,7 @@
 import cv2
 import numpy as np
 import os
-from skimage.feature import local_binary_pattern
-from skimage.feature import greycomatrix, greycoprops
-from matplotlib import pyplot as plt
-
+from skimage.feature import local_binary_pattern, greycomatrix, greycoprops
 
 def ekstrak_fitur_lbp(gray):
     radius = 1
@@ -15,48 +12,51 @@ def ekstrak_fitur_lbp(gray):
     lbp_hist /= (lbp_hist.sum() + 1e-6)
     return lbp_hist, lbp
 
-def ekstrak_fitur_glcm(gray):
-    distances = [1]
-    angles = [0]
-    glcm = greycomatrix(gray, distances=distances, angles=angles, symmetric=True, normed=True)
-    contrast = greycoprops(glcm, 'contrast')[0, 0]
-    dissimilarity = greycoprops(glcm, 'dissimilarity')[0, 0]
-    homogeneity = greycoprops(glcm, 'homogeneity')[0, 0]
-    energy = greycoprops(glcm, 'energy')[0, 0]
-    correlation = greycoprops(glcm, 'correlation')[0, 0]
-    asm = greycoprops(glcm, 'ASM')[0, 0]
-    return [contrast, dissimilarity, homogeneity, energy, correlation, asm], glcm
+def ekstraksi_fitur_tekstur_glcm(image_gray):
+    image_gray = cv2.normalize(image_gray, None, 0, 255, cv2.NORM_MINMAX).astype('uint8')
+    distances = [1, 2, 3]
+    angles = [0, np.pi/4, np.pi/2, 3*np.pi/4]
+    glcm = greycomatrix(image_gray, distances=distances, angles=angles,
+                        levels=256, symmetric=True, normed=True)
 
-def tampilkan_proses_ekstraksi(img, lbp_img, glcm_matrix):
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    props = ['contrast', 'dissimilarity', 'homogeneity', 'energy', 'correlation', 'ASM']
+    fitur = []
+    for prop in props:
+        nilai = greycoprops(glcm, prop)
+        fitur.append(np.mean(nilai))
+    return np.array(fitur), glcm
 
-    # Normalisasi nilai GLCM untuk divisualisasikan
-    glcm_vis = glcm_matrix[:, :, 0, 0]
-    glcm_vis = cv2.normalize(glcm_vis, None, 0, 255, cv2.NORM_MINMAX)
-    glcm_vis = glcm_vis.astype(np.uint8)
-    glcm_vis = cv2.resize(glcm_vis, (gray.shape[1], gray.shape[0]))
+def tampilkan_proses_glcm(image_bgr):
+    asli = cv2.resize(image_bgr, (300, 300))
+    gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
+    gray_resized = cv2.resize(gray, (300, 300))
 
-    # Ubah LBP ke format uint8 untuk ditampilkan
-    lbp_vis = cv2.normalize(lbp_img, None, 0, 255, cv2.NORM_MINMAX)
-    lbp_vis = lbp_vis.astype(np.uint8)
+    blur = cv2.GaussianBlur(gray, (5, 5), 0)
+    _, thresh = cv2.threshold(blur, 180, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    thresh_resized = cv2.resize(thresh, (300, 300))
 
-    # Pastikan semua gambar berdimensi sama
-    if lbp_vis.shape != gray.shape:
-        lbp_vis = cv2.resize(lbp_vis, (gray.shape[1], gray.shape[0]))
+    kosong = np.zeros_like(asli)
+    atas = np.hstack([asli, cv2.cvtColor(gray_resized, cv2.COLOR_GRAY2BGR)])
+    bawah = np.hstack([cv2.cvtColor(thresh_resized, cv2.COLOR_GRAY2BGR), kosong])
+    return np.vstack([atas, bawah])
 
-    proses_lbp = np.hstack([gray, lbp_vis])
-    proses_glcm = np.hstack([gray, glcm_vis])
+def tampilkan_proses_lbp(image_bgr, lbp_img, lbp_hist):
+    gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
+    asli = cv2.resize(image_bgr, (300, 300))
+    gray = cv2.resize(gray, (300, 300))
+    lbp_vis = cv2.normalize(lbp_img, None, 0, 255, cv2.NORM_MINMAX).astype('uint8')
+    lbp_vis = cv2.resize(lbp_vis, (300, 300))
 
-    semua = np.vstack([
-        proses_lbp,
-        proses_glcm
-    ])
-    return semua
+    baris_atas = np.hstack([asli, cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)])
+    baris_bawah = np.hstack([cv2.cvtColor(lbp_vis, cv2.COLOR_GRAY2BGR), np.zeros_like(asli)])
 
-def simpan_visualisasi(output_path, visual_img):
-    if not os.path.exists('hasil_visual'):
-        os.makedirs('hasil_visual')
-    cv2.imwrite(os.path.join('hasil_visual', output_path), visual_img)
+    # Histogram LBP sebagai gambar
+    hist_canvas = np.ones((300, 600, 3), dtype=np.uint8) * 255
+    hist_scaled = (lbp_hist * 250).astype(np.int32)
+    for i in range(len(hist_scaled)):
+        cv2.line(hist_canvas, (i*10 + 10, 290), (i*10 + 10, 290 - hist_scaled[i]), (0, 0, 255), 5)
+
+    return np.vstack([baris_atas, baris_bawah]), hist_canvas
 
 def ekstrak_visual_dataset(path_dataset):
     for root, dirs, files in os.walk(path_dataset):
@@ -67,14 +67,29 @@ def ekstrak_visual_dataset(path_dataset):
                 if img is None:
                     print(f"[SKIP] Gagal membaca: {filepath}")
                     continue
+
                 gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-                lbp_feat, lbp_img = ekstrak_fitur_lbp(gray)
-                glcm_feat, glcm_mtx = ekstrak_fitur_glcm(gray)
 
-                visual = tampilkan_proses_ekstraksi(img, lbp_img, glcm_mtx)
-                simpan_visualisasi(filename, visual)
+                # Ekstraksi fitur
+                glcm_fitur, glcm_mtx = ekstraksi_fitur_tekstur_glcm(gray)
+                lbp_hist, lbp_img = ekstrak_fitur_lbp(gray)
 
-                print(f'[OK] {filename} berhasil diproses dan disimpan.')
+                # Visualisasi proses
+                visual_glcm = tampilkan_proses_glcm(img)
+                visual_lbp, hist_lbp = tampilkan_proses_lbp(img, lbp_img, lbp_hist)
+
+                # Tampilkan dua jendela
+                cv2.imshow("Visualisasi Proses GLCM", visual_glcm)
+                cv2.imshow("Visualisasi Proses LBP", visual_lbp)
+                cv2.imshow("Histogram LBP", hist_lbp)
+
+                print(f"Tampilkan {filename} - Tekan tombol untuk lanjut, ESC untuk keluar.")
+                key = cv2.waitKey(0)
+                if key == 27:
+                    print("[!] Dihentikan oleh pengguna.")
+                    cv2.destroyAllWindows()
+                    return
+                cv2.destroyAllWindows()
 
 if __name__ == "__main__":
     ekstrak_visual_dataset('dataset')
