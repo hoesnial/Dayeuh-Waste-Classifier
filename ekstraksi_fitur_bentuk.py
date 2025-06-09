@@ -1,5 +1,7 @@
 import cv2
 import numpy as np
+import pandas as pd
+import os
 
 def ekstraksi_fitur_logam(image):
     # 1. Grayscale
@@ -23,21 +25,13 @@ def ekstraksi_fitur_logam(image):
     return fitur, gray, laplacian_abs, threshold
 
 def gambar_kontur_logam(image_asli, mask_threshold):
-    # Copy agar gambar asli tidak diubah
     kontur_img = image_asli.copy()
-
-    # Temukan kontur dari mask threshold
     contours, _ = cv2.findContours(mask_threshold, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-    # Filter kontur terlalu kecil (noise)
     contours = [cnt for cnt in contours if cv2.contourArea(cnt) > 200]
-
-    # Gambar kontur di atas gambar asli
     cv2.drawContours(kontur_img, contours, -1, (0, 0, 255), 2)
-
     return kontur_img
 
-# ---------- UJI VISUALISASI ----------
+# ---------- UJI VISUALISASI & SIMPAN CSV ----------
 if __name__ == '__main__':
     img_path = 'dataset/logam/contoh1.jpg'  # Ganti dengan path gambar logam
     image = cv2.imread(img_path)
@@ -53,20 +47,30 @@ if __name__ == '__main__':
     for k, v in fitur.items():
         print(f"{k}: {v:.2f}")
 
-    # Siapkan gambar untuk visualisasi
+    # ---------- SIMPAN KE CSV ----------
+    output_csv = 'fitur_logam_dataset.csv'
+    df_fitur = pd.DataFrame([fitur])
+    df_fitur.insert(0, 'nama_file', os.path.basename(img_path))
+
+    if not os.path.isfile(output_csv):
+        df_fitur.to_csv(output_csv, index=False)
+    else:
+        df_fitur.to_csv(output_csv, mode='a', header=False, index=False)
+
+    print(f"Fitur berhasil disimpan ke dalam file: {output_csv}")
+
+    # ---------- VISUALISASI ----------
     img_asli = cv2.resize(image, (300, 300))
     gray = cv2.resize(gray, (300, 300))
     laplacian_vis = cv2.resize(laplacian_abs, (300, 300))
     threshold = cv2.resize(threshold, (300, 300))
 
-    # Tambahkan teks
     cv2.putText(img_asli, "Gambar Asli", (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,255,0), 2)
     cv2.putText(gray, "Grayscale", (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, 255, 2)
     cv2.putText(laplacian_vis, "Laplacian (Pantulan)", (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, 255, 2)
     cv2.putText(threshold, "Threshold Area Terang", (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, 255, 2)
     cv2.putText(gambar_kontur, "Deteksi Logam (Kontur)", (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,0,255), 2)
 
-    # Gabungkan hasil
     atas = np.hstack([img_asli, cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)])
     tengah = np.hstack([cv2.cvtColor(laplacian_vis, cv2.COLOR_GRAY2BGR),
                         cv2.cvtColor(threshold, cv2.COLOR_GRAY2BGR)])

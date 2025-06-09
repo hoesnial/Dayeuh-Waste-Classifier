@@ -1,66 +1,80 @@
 import cv2
 import numpy as np
-from skimage.feature import graycomatrix, graycoprops
-import matplotlib.pyplot as plt
+import os
+from skimage.feature import local_binary_pattern
+from skimage.feature import greycomatrix, greycoprops
+from matplotlib import pyplot as plt
 
-def ekstraksi_tekstur_glcm(image_gray):
-    glcm = graycomatrix(image_gray, distances=[1], angles=[0], levels=256, symmetric=True, normed=True)
-    fitur = {
-        'energi': graycoprops(glcm, 'energy')[0, 0],
-        'kontras': graycoprops(glcm, 'contrast')[0, 0],
-        'homogenitas': graycoprops(glcm, 'homogeneity')[0, 0],
-        'korelasi': graycoprops(glcm, 'correlation')[0, 0],
-    }
-    return fitur
 
-# ---------- UJI VISUALISASI ----------
-if __name__ == '__main__':
-    path = 'dataset/plastik/contoh1.jpg'  # Ganti dengan path gambar plastik kamu
-    image = cv2.imread(path)
+def ekstrak_fitur_lbp(gray):
+    radius = 1
+    n_points = 8 * radius
+    lbp = local_binary_pattern(gray, n_points, radius, method='uniform')
+    lbp_hist, _ = np.histogram(lbp.ravel(), bins=np.arange(0, n_points + 3), range=(0, n_points + 2))
+    lbp_hist = lbp_hist.astype("float")
+    lbp_hist /= (lbp_hist.sum() + 1e-6)
+    return lbp_hist, lbp
 
-    if image is None:
-        print("Gambar tidak ditemukan!")
-        exit()
+def ekstrak_fitur_glcm(gray):
+    distances = [1]
+    angles = [0]
+    glcm = greycomatrix(gray, distances=distances, angles=angles, symmetric=True, normed=True)
+    contrast = greycoprops(glcm, 'contrast')[0, 0]
+    dissimilarity = greycoprops(glcm, 'dissimilarity')[0, 0]
+    homogeneity = greycoprops(glcm, 'homogeneity')[0, 0]
+    energy = greycoprops(glcm, 'energy')[0, 0]
+    correlation = greycoprops(glcm, 'correlation')[0, 0]
+    asm = greycoprops(glcm, 'ASM')[0, 0]
+    return [contrast, dissimilarity, homogeneity, energy, correlation, asm], glcm
 
-    # Grayscale dan pra-pemrosesan
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    blur = cv2.GaussianBlur(gray, (5, 5), 0)
+def tampilkan_proses_ekstraksi(img, lbp_img, glcm_matrix):
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-    # Resize agar seragam untuk GLCM
-    gray_resized = cv2.resize(blur, (256, 256))
+    # Normalisasi nilai GLCM untuk divisualisasikan
+    glcm_vis = glcm_matrix[:, :, 0, 0]
+    glcm_vis = cv2.normalize(glcm_vis, None, 0, 255, cv2.NORM_MINMAX)
+    glcm_vis = glcm_vis.astype(np.uint8)
+    glcm_vis = cv2.resize(glcm_vis, (gray.shape[1], gray.shape[0]))
 
-    # Ekstraksi fitur tekstur (GLCM)
-    fitur = ekstraksi_tekstur_glcm(gray_resized)
+    # Ubah LBP ke format uint8 untuk ditampilkan
+    lbp_vis = cv2.normalize(lbp_img, None, 0, 255, cv2.NORM_MINMAX)
+    lbp_vis = lbp_vis.astype(np.uint8)
 
-    # Segmentasi threshold untuk deteksi objek
-    _, thresh = cv2.threshold(gray_resized, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    # Pastikan semua gambar berdimensi sama
+    if lbp_vis.shape != gray.shape:
+        lbp_vis = cv2.resize(lbp_vis, (gray.shape[1], gray.shape[0]))
 
-    # Temukan kontur
-    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    proses_lbp = np.hstack([gray, lbp_vis])
+    proses_glcm = np.hstack([gray, glcm_vis])
 
-    # Buat salinan gambar untuk menampilkan kontur
-    kontur_img = cv2.cvtColor(gray_resized.copy(), cv2.COLOR_GRAY2BGR)
-    cv2.drawContours(kontur_img, contours, -1, (0, 255, 0), 2)
+    semua = np.vstack([
+        proses_lbp,
+        proses_glcm
+    ])
+    return semua
 
-    # Tampilkan fitur
-    print("Fitur Tekstur (GLCM):")
-    for k, v in fitur.items():
-        print(f"{k.capitalize()}: {v:.4f}")
+def simpan_visualisasi(output_path, visual_img):
+    if not os.path.exists('hasil_visual'):
+        os.makedirs('hasil_visual')
+    cv2.imwrite(os.path.join('hasil_visual', output_path), visual_img)
 
-    # Visualisasi proses
-    fig, axs = plt.subplots(1, 3, figsize=(15, 5))
-    axs[0].imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
-    axs[0].set_title("Gambar Asli")
-    axs[0].axis('off')
+def ekstrak_visual_dataset(path_dataset):
+    for root, dirs, files in os.walk(path_dataset):
+        for filename in files:
+            if filename.lower().endswith(('.jpg', '.jpeg', '.png')):
+                filepath = os.path.join(root, filename)
+                img = cv2.imread(filepath)
+                if img is None:
+                    print(f"[SKIP] Gagal membaca: {filepath}")
+                    continue
+                gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+                lbp_feat, lbp_img = ekstrak_fitur_lbp(gray)
+                glcm_feat, glcm_mtx = ekstrak_fitur_glcm(gray)
 
-    axs[1].imshow(gray_resized, cmap='gray')
-    axs[1].set_title("Grayscale + Resize")
-    axs[1].axis('off')
+                visual = tampilkan_proses_ekstraksi(img, lbp_img, glcm_mtx)
+                simpan_visualisasi(filename, visual)
 
-    axs[2].imshow(cv2.cvtColor(kontur_img, cv2.COLOR_BGR2RGB))
-    axs[2].set_title("Deteksi Kontur Objek Plastik")
-    axs[2].axis('off')
+                print(f'[OK] {filename} berhasil diproses dan disimpan.')
 
-    plt.suptitle("Ekstraksi Tekstur Plastik + Kontur", fontsize=14)
-    plt.tight_layout()
-    plt.show()
+if __name__ == "__main__":
+    ekstrak_visual_dataset('dataset')
