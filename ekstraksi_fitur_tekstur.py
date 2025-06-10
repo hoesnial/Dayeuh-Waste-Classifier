@@ -30,11 +30,9 @@ def tampilkan_proses_glcm(image_bgr):
     asli = cv2.resize(image_bgr, (300, 300))
     gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
     gray_resized = cv2.resize(gray, (300, 300))
-
     blur = cv2.GaussianBlur(gray, (5, 5), 0)
     _, thresh = cv2.threshold(blur, 180, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
     thresh_resized = cv2.resize(thresh, (300, 300))
-
     kosong = np.zeros_like(asli)
     atas = np.hstack([asli, cv2.cvtColor(gray_resized, cv2.COLOR_GRAY2BGR)])
     bawah = np.hstack([cv2.cvtColor(thresh_resized, cv2.COLOR_GRAY2BGR), kosong])
@@ -50,15 +48,19 @@ def tampilkan_proses_lbp(image_bgr, lbp_img, lbp_hist):
     baris_atas = np.hstack([asli, cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)])
     baris_bawah = np.hstack([cv2.cvtColor(lbp_vis, cv2.COLOR_GRAY2BGR), np.zeros_like(asli)])
 
-    # Histogram LBP sebagai gambar
     hist_canvas = np.ones((300, 600, 3), dtype=np.uint8) * 255
     hist_scaled = (lbp_hist * 250).astype(np.int32)
     for i in range(len(hist_scaled)):
-        cv2.line(hist_canvas, (i*10 + 10, 290), (i*10 + 10, 290 - hist_scaled[i]), (0, 0, 255), 5)
+        x = i * 10 + 10
+        y_top = 290 - hist_scaled[i]
+        cv2.line(hist_canvas, (x, 290), (x, y_top), (0, 0, 255), 5)
 
     return np.vstack([baris_atas, baris_bawah]), hist_canvas
 
 def ekstrak_visual_dataset(path_dataset):
+    output_dir = 'hasil_ekstraksi/plastik'
+    os.makedirs(output_dir, exist_ok=True)
+
     for root, dirs, files in os.walk(path_dataset):
         for filename in files:
             if filename.lower().endswith(('.jpg', '.jpeg', '.png')):
@@ -78,18 +80,13 @@ def ekstrak_visual_dataset(path_dataset):
                 visual_glcm = tampilkan_proses_glcm(img)
                 visual_lbp, hist_lbp = tampilkan_proses_lbp(img, lbp_img, lbp_hist)
 
-                # Tampilkan dua jendela
-                cv2.imshow("Visualisasi Proses GLCM", visual_glcm)
-                cv2.imshow("Visualisasi Proses LBP", visual_lbp)
-                cv2.imshow("Histogram LBP", hist_lbp)
+                # Simpan ke file
+                nama_file = os.path.splitext(filename)[0]
+                cv2.imwrite(os.path.join(output_dir, f"{nama_file}_glcm.jpg"), visual_glcm)
+                cv2.imwrite(os.path.join(output_dir, f"{nama_file}_lbp.jpg"), visual_lbp)
+                cv2.imwrite(os.path.join(output_dir, f"{nama_file}_lbp_hist.jpg"), hist_lbp)
 
-                print(f"Tampilkan {filename} - Tekan tombol untuk lanjut, ESC untuk keluar.")
-                key = cv2.waitKey(0)
-                if key == 27:
-                    print("[!] Dihentikan oleh pengguna.")
-                    cv2.destroyAllWindows()
-                    return
-                cv2.destroyAllWindows()
+                print(f"[✓] Disimpan: {nama_file}_glcm.jpg, _lbp.jpg, _lbp_hist.jpg")
 
 if __name__ == "__main__":
     ekstrak_visual_dataset('dataset')

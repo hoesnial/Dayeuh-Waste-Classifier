@@ -38,27 +38,27 @@ def tampilkan_gambar_dengan_teks(judul, image, mean_std):
                     0.5, (255, 255, 255), 1)
     return img
 
-def tampilkan_histogram(hist_H, hist_S, hist_V):
-    plt.figure(figsize=(9, 3))
-    plt.subplot(1,3,1)
-    plt.title('Histogram Hue')
-    plt.plot(hist_H, color='r')
-    plt.xlim([0, 256])
-    plt.subplot(1,3,2)
-    plt.title('Histogram Saturation')
-    plt.plot(hist_S, color='g')
-    plt.xlim([0, 256])
-    plt.subplot(1,3,3)
-    plt.title('Histogram Value')
-    plt.plot(hist_V, color='b')
+def plot_histogram_gambar(hist, title, color):
+    plt.figure(figsize=(4,3))
+    plt.plot(hist, color=color)
+    plt.title(title)
     plt.xlim([0, 256])
     plt.tight_layout()
-    plt.show()
+
+    # Konversi ke image (numpy array)
+    plt.savefig("temp.png")
+    plt.close()
+    img = cv2.imread("temp.png")
+    os.remove("temp.png")
+    return img
 
 def proses_kertas_polos_berwarna(folder_kertas):
     if not os.path.exists(folder_kertas):
         print(f"[!] Folder tidak ditemukan: {folder_kertas}")
         return
+
+    output_dir = 'hasil_ekstraksi/kertas'
+    os.makedirs(output_dir, exist_ok=True)
 
     for nama_file in os.listdir(folder_kertas):
         path_gambar = os.path.join(folder_kertas, nama_file)
@@ -68,8 +68,6 @@ def proses_kertas_polos_berwarna(folder_kertas):
             continue
 
         img = cv2.resize(img, (300, 300))
-
-        # Ekstraksi LAB
         fitur_lab, L, A, B = ekstraksi_warna_presisi(img)
         stds = [np.std(L), np.std(A), np.std(B)]
         total_std = sum(stds)
@@ -83,7 +81,11 @@ def proses_kertas_polos_berwarna(folder_kertas):
         vis_A = tampilkan_gambar_dengan_teks("Kanal A", A, mean_std_A)
         vis_B = tampilkan_gambar_dengan_teks("Kanal B", B, mean_std_B)
 
-        # Ekstraksi HSV
+        hist_A = cv2.calcHist([A], [0], None, [256], [0,256])
+        hist_B = cv2.calcHist([B], [0], None, [256], [0,256])
+        hist_A = hist_A / hist_A.sum()
+        hist_B = hist_B / hist_B.sum()
+
         fitur_hsv, H, S, V, hist_H, hist_S, hist_V = ekstraksi_hsv_mean_hist(img)
         mean_H = np.mean(H)
         mean_S = np.mean(S)
@@ -93,38 +95,51 @@ def proses_kertas_polos_berwarna(folder_kertas):
         vis_S = tampilkan_gambar_dengan_teks("Kanal S", S, (mean_S,))
         vis_V = tampilkan_gambar_dengan_teks("Kanal V", V, (mean_V,))
 
-        # Gabungkan hasil visualisasi LAB
         img_asli = img.copy()
         cv2.putText(img_asli, f"{nama_file} ({tipe_kertas})", (10, 25),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
         atas_lab = np.hstack([img_asli, cv2.cvtColor(vis_L, cv2.COLOR_GRAY2BGR)])
         bawah_lab = np.hstack([cv2.cvtColor(vis_A, cv2.COLOR_GRAY2BGR),
-                           cv2.cvtColor(vis_B, cv2.COLOR_GRAY2BGR)])
+                               cv2.cvtColor(vis_B, cv2.COLOR_GRAY2BGR)])
         gabung_lab = np.vstack([atas_lab, bawah_lab])
 
-        # Gabungkan hasil visualisasi HSV
         atas_hsv = np.hstack([img_asli, cv2.cvtColor(vis_H, cv2.COLOR_GRAY2BGR)])
         bawah_hsv = np.hstack([cv2.cvtColor(vis_S, cv2.COLOR_GRAY2BGR),
-                           cv2.cvtColor(vis_V, cv2.COLOR_GRAY2BGR)])
+                               cv2.cvtColor(vis_V, cv2.COLOR_GRAY2BGR)])
         gabung_hsv = np.vstack([atas_hsv, bawah_hsv])
 
-        # Tampilkan semua jendela
-        cv2.imshow("1. Ekstraksi Warna LAB", gabung_lab)
-        cv2.imshow("2. Ekstraksi Warna HSV", gabung_hsv)
+        # Simpan LAB dan HSV Visual
+        nama_file_no_ext = os.path.splitext(nama_file)[0]
+        path_lab = os.path.join(output_dir, f"{nama_file_no_ext}_LAB.jpg")
+        path_hsv = os.path.join(output_dir, f"{nama_file_no_ext}_HSV.jpg")
+        cv2.imwrite(path_lab, gabung_lab)
+        cv2.imwrite(path_hsv, gabung_hsv)
 
         print(f"[OK] {nama_file} -> Kertas {tipe_kertas} | Total Std Dev LAB: {total_std:.2f}")
-        print(f"     HSV Mean (H, S, V): {fitur_hsv[0]:.2f}, {fitur_hsv[1]:.2f}, {fitur_hsv[2]:.2f}")
 
-        tampilkan_histogram(hist_H, hist_S, hist_V)
+        # Tampilkan semua hasil
+        cv2.imshow("Visual LAB", gabung_lab)
+        cv2.imshow("Visual HSV", gabung_hsv)
+
+        hist_lab_img = np.hstack([
+            plot_histogram_gambar(hist_A, "Histogram A (LAB)", 'magenta'),
+            plot_histogram_gambar(hist_B, "Histogram B (LAB)", 'orange')
+        ])
+        hist_hsv_img = np.hstack([
+            plot_histogram_gambar(hist_H, "Histogram Hue", 'red'),
+            plot_histogram_gambar(hist_S, "Histogram Saturation", 'green'),
+            plot_histogram_gambar(hist_V, "Histogram Value", 'blue')
+        ])
+
+        cv2.imshow("Histogram LAB", hist_lab_img)
+        cv2.imshow("Histogram HSV", hist_hsv_img)
 
         key = cv2.waitKey(0) & 0xFF
-        if key == 27:  # ESC
-            print("[X] Proses dihentikan oleh pengguna.")
-            cv2.destroyAllWindows()
-            return
-
-    cv2.destroyAllWindows()
+        cv2.destroyAllWindows()
+        if key == 27:
+            print("[X] Dihentikan oleh pengguna.")
+            break
 
 if __name__ == '__main__':
     proses_kertas_polos_berwarna('dataset/kertas')
