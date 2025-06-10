@@ -1,80 +1,107 @@
 import cv2
 import numpy as np
 import os
-from skimage.feature import local_binary_pattern
-from skimage.feature import greycomatrix, greycoprops
-from matplotlib import pyplot as plt
+import pandas as pd
+from skimage.feature import graycomatrix, graycoprops, local_binary_pattern
 
+# --- GLCM Ekstraksi (peningkatan: banyak jarak & rata-rata global) ---
+def ekstraksi_fitur_tekstur_glcm(image_gray):
+    image_gray = cv2.normalize(image_gray, None, 0, 255, cv2.NORM_MINMAX).astype('uint8')
+    distances = [1, 2, 3]
+    angles = [0, np.pi/4, np.pi/2, 3*np.pi/4]
+    glcm = graycomatrix(image_gray, distances=distances, angles=angles,
+                        levels=256, symmetric=True, normed=True)
 
-def ekstrak_fitur_lbp(gray):
-    radius = 1
-    n_points = 8 * radius
-    lbp = local_binary_pattern(gray, n_points, radius, method='uniform')
-    lbp_hist, _ = np.histogram(lbp.ravel(), bins=np.arange(0, n_points + 3), range=(0, n_points + 2))
-    lbp_hist = lbp_hist.astype("float")
-    lbp_hist /= (lbp_hist.sum() + 1e-6)
-    return lbp_hist, lbp
+    props = ['contrast', 'dissimilarity', 'homogeneity', 'energy', 'correlation', 'ASM']
+    fitur = []
+    for prop in props:
+        nilai = graycoprops(glcm, prop)
+        fitur.append(np.mean(nilai))  # rata-rata seluruh kombinasi
+    return np.array(fitur)
 
-def ekstrak_fitur_glcm(gray):
-    distances = [1]
-    angles = [0]
-    glcm = greycomatrix(gray, distances=distances, angles=angles, symmetric=True, normed=True)
-    contrast = greycoprops(glcm, 'contrast')[0, 0]
-    dissimilarity = greycoprops(glcm, 'dissimilarity')[0, 0]
-    homogeneity = greycoprops(glcm, 'homogeneity')[0, 0]
-    energy = greycoprops(glcm, 'energy')[0, 0]
-    correlation = greycoprops(glcm, 'correlation')[0, 0]
-    asm = greycoprops(glcm, 'ASM')[0, 0]
-    return [contrast, dissimilarity, homogeneity, energy, correlation, asm], glcm
+# --- LBP Ekstraksi (peningkatan: P=16, R=2, uniform histogram lebih deskriptif) ---
+def ekstraksi_fitur_lbp(image_gray):
+    P, R = 16, 2
+    lbp = local_binary_pattern(image_gray, P, R, method='uniform')
+    n_bins = P + 2  # Uniform pattern
+    (hist, _) = np.histogram(lbp.ravel(), bins=np.arange(0, n_bins + 1), range=(0, n_bins))
+    hist = hist.astype("float")
+    hist /= (hist.sum() + 1e-6)  # Normalisasi
+    return hist, lbp.astype('uint8')
 
-def tampilkan_proses_ekstraksi(img, lbp_img, glcm_matrix):
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+# --- Visualisasi Proses GLCM ---
+def tampilkan_proses_glcm(image_bgr):
+    asli = cv2.resize(image_bgr, (300, 300))
+    gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
+    gray_resized = cv2.resize(gray, (300, 300))
 
-    # Normalisasi nilai GLCM untuk divisualisasikan
-    glcm_vis = glcm_matrix[:, :, 0, 0]
-    glcm_vis = cv2.normalize(glcm_vis, None, 0, 255, cv2.NORM_MINMAX)
-    glcm_vis = glcm_vis.astype(np.uint8)
-    glcm_vis = cv2.resize(glcm_vis, (gray.shape[1], gray.shape[0]))
+    blur = cv2.GaussianBlur(gray, (5, 5), 0)
+    _, thresh = cv2.threshold(blur, 180, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    thresh_resized = cv2.resize(thresh, (300, 300))
 
-    # Ubah LBP ke format uint8 untuk ditampilkan
-    lbp_vis = cv2.normalize(lbp_img, None, 0, 255, cv2.NORM_MINMAX)
-    lbp_vis = lbp_vis.astype(np.uint8)
+    kosong = np.zeros_like(asli)
+    atas = np.hstack([asli, cv2.cvtColor(gray_resized, cv2.COLOR_GRAY2BGR)])
+    bawah = np.hstack([cv2.cvtColor(thresh_resized, cv2.COLOR_GRAY2BGR), kosong])
+    return np.vstack([atas, bawah])
 
-    # Pastikan semua gambar berdimensi sama
-    if lbp_vis.shape != gray.shape:
-        lbp_vis = cv2.resize(lbp_vis, (gray.shape[1], gray.shape[0]))
-
-    proses_lbp = np.hstack([gray, lbp_vis])
-    proses_glcm = np.hstack([gray, glcm_vis])
-
-    semua = np.vstack([
-        proses_lbp,
-        proses_glcm
+# --- Visualisasi Proses LBP ---
+def tampilkan_proses_lbp(image_bgr, lbp_image):
+    gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
+    gray_resized = cv2.resize(gray, (300, 300))
+    lbp_resized = cv2.resize(lbp_image, (300, 300))
+    asli_resized = cv2.resize(image_bgr, (600, 300))
+    gabung = np.hstack([
+        cv2.cvtColor(gray_resized, cv2.COLOR_GRAY2BGR),
+        cv2.cvtColor(lbp_resized, cv2.COLOR_GRAY2BGR)
     ])
-    return semua
+    return np.vstack([asli_resized, gabung])
 
-def simpan_visualisasi(output_path, visual_img):
-    if not os.path.exists('hasil_visual'):
-        os.makedirs('hasil_visual')
-    cv2.imwrite(os.path.join('hasil_visual', output_path), visual_img)
+# --- Proses Dataset ---
+def ekstrak_visual_dataset(folder_dataset, output_csv='fitur_tekstur_plastik.csv'):
+    data_fitur = []
+    folder_plastik = os.path.join(folder_dataset, 'plastik')
 
-def ekstrak_visual_dataset(path_dataset):
-    for root, dirs, files in os.walk(path_dataset):
-        for filename in files:
-            if filename.lower().endswith(('.jpg', '.jpeg', '.png')):
-                filepath = os.path.join(root, filename)
-                img = cv2.imread(filepath)
-                if img is None:
-                    print(f"[SKIP] Gagal membaca: {filepath}")
-                    continue
-                gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-                lbp_feat, lbp_img = ekstrak_fitur_lbp(gray)
-                glcm_feat, glcm_mtx = ekstrak_fitur_glcm(gray)
+    if not os.path.exists(folder_plastik):
+        print(f"[!] Folder tidak ditemukan: {folder_plastik}")
+        return
 
-                visual = tampilkan_proses_ekstraksi(img, lbp_img, glcm_mtx)
-                simpan_visualisasi(filename, visual)
+    for nama_file in os.listdir(folder_plastik):
+        path_gambar = os.path.join(folder_plastik, nama_file)
+        img = cv2.imread(path_gambar)
 
-                print(f'[OK] {filename} berhasil diproses dan disimpan.')
+        if img is None:
+            print(f"[!] Gagal membaca: {path_gambar}")
+            continue
 
-if __name__ == "__main__":
+        img = cv2.resize(img, (300, 300))
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+        fitur_glcm = ekstraksi_fitur_tekstur_glcm(gray)
+        fitur_lbp, lbp_img = ekstraksi_fitur_lbp(gray)
+
+        fitur_total = np.concatenate([fitur_glcm, fitur_lbp])
+        data_fitur.append(list(fitur_total) + [0])  # Label plastik = 0
+
+        visual_glcm = tampilkan_proses_glcm(img)
+        visual_lbp = tampilkan_proses_lbp(img, lbp_img)
+
+        cv2.imshow("Proses Ekstraksi Tekstur GLCM", visual_glcm)
+        cv2.imshow("Proses Ekstraksi Tekstur LBP", visual_lbp)
+        print(f"Tampilkan: {nama_file} — Tekan tombol apa pun untuk lanjut...")
+        key = cv2.waitKey(0)
+        if key == 27:
+            print("[!] Dihentikan oleh pengguna.")
+            break
+        cv2.destroyAllWindows()
+
+    kolom_glcm = ['contrast', 'dissimilarity', 'homogeneity', 'energy', 'correlation', 'ASM']
+    kolom_lbp = [f'lbp_{i}' for i in range(18)]
+    kolom = kolom_glcm + kolom_lbp + ['label']
+
+    df = pd.DataFrame(data_fitur, columns=kolom)
+    df.to_csv(output_csv, index=False)
+    print(f"[✓] Dataset fitur tekstur plastik berhasil disimpan ke {output_csv}")
+
+# --- Eksekusi ---
+if __name__ == '__main__':
     ekstrak_visual_dataset('dataset')
