@@ -1,28 +1,36 @@
 import cv2
 import numpy as np
-import pandas as pd
 import os
 
 def ekstraksi_fitur_logam(image):
-    # 1. Grayscale
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-
-    # 2. Laplacian untuk mendeteksi pantulan tajam
-    laplacian = cv2.Laplacian(gray, cv2.CV_64F)
-    laplacian_abs = cv2.convertScaleAbs(laplacian)
-
-    # 3. Threshold area terang
     _, threshold = cv2.threshold(gray, 180, 255, cv2.THRESH_BINARY)
 
-    # 4. Statistik intensitas dan pantulan
+    contours, _ = cv2.findContours(threshold, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours = [cnt for cnt in contours if cv2.contourArea(cnt) > 200]
+
+    if contours:
+        cnt_terbesar = max(contours, key=cv2.contourArea)
+        area = cv2.contourArea(cnt_terbesar)
+        hull = cv2.convexHull(cnt_terbesar)
+        hull_area = cv2.contourArea(hull)
+        solidity = float(area) / hull_area if hull_area > 0 else 0
+        moments = cv2.moments(cnt_terbesar)
+        hu_moments = cv2.HuMoments(moments).flatten()
+        hu_moments_log = -np.sign(hu_moments) * np.log10(np.abs(hu_moments) + 1e-10)
+    else:
+        solidity = 0
+        hu_moments_log = np.zeros(7)
+
     fitur = {
         "mean_gray": np.mean(gray),
         "std_gray": np.std(gray),
-        "mean_laplacian": np.mean(laplacian_abs),
-        "std_laplacian": np.std(laplacian_abs)
+        "solidity": solidity,
     }
+    for i in range(7):
+        fitur[f"hu_moment{i+1}"] = hu_moments_log[i]
 
-    return fitur, gray, laplacian_abs, threshold
+    return fitur, gray, threshold
 
 def gambar_kontur_logam(image_asli, mask_threshold):
     kontur_img = image_asli.copy()
@@ -31,53 +39,61 @@ def gambar_kontur_logam(image_asli, mask_threshold):
     cv2.drawContours(kontur_img, contours, -1, (0, 0, 255), 2)
     return kontur_img
 
-# ---------- UJI VISUALISASI & SIMPAN CSV ----------
+def tampilkan_gambar_dengan_text(judul, img):
+    img = cv2.resize(img, (300, 300))
+    warna = (255, 255, 255) if len(img.shape) == 2 else (0, 255, 0)
+    if len(img.shape) == 2:
+        img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+    cv2.putText(img, judul, (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, warna, 2)
+    return img
+
+def proses_folder_logam(folder_path='dataset/logam', output_dir='hasil_ekstraksi/logam'):
+    if not os.path.exists(folder_path):
+        print(f"[!] Folder tidak ditemukan: {folder_path}")
+        return
+
+    os.makedirs(output_dir, exist_ok=True)
+
+    for filename in os.listdir(folder_path):
+        path_img = os.path.join(folder_path, filename)
+        image = cv2.imread(path_img)
+        if image is None:
+            print(f"[!] Gagal membaca gambar: {path_img}")
+            continue
+
+        fitur, gray, threshold = ekstraksi_fitur_logam(image)
+        image_resized = cv2.resize(image, (300, 300))
+        gray_resized = cv2.resize(gray, (300, 300))
+        threshold_resized = cv2.resize(threshold, (300, 300))
+        kontur_resized = gambar_kontur_logam(image_resized, threshold_resized)
+
+        print(f"\n--- Fitur untuk {filename} ---")
+        for k, v in fitur.items():
+            print(f"{k}: {v:.4f}")
+
+        # Buat versi anotasi
+        vis1 = tampilkan_gambar_dengan_text("Gambar Asli", image_resized)
+        vis2 = tampilkan_gambar_dengan_text("Grayscale", gray_resized)
+        vis3 = tampilkan_gambar_dengan_text("Threshold Area Terang", threshold_resized)
+        vis4 = tampilkan_gambar_dengan_text("Deteksi Kontur Logam", kontur_resized)
+
+        nama_dasar = os.path.splitext(filename)[0]
+        simpan_gambar = [
+            (vis1, f"{nama_dasar}_asli.jpg"),
+            (vis2, f"{nama_dasar}_gray.jpg"),
+            (vis3, f"{nama_dasar}_thresh.jpg"),
+            (vis4, f"{nama_dasar}_kontur.jpg")
+        ]
+
+        for i, (img_out, nama_file) in enumerate(simpan_gambar):
+            path_simpan = os.path.join(output_dir, nama_file)
+            cv2.imwrite(path_simpan, img_out)
+            cv2.imshow(f"[{filename}] - {nama_file}", img_out)
+            key = cv2.waitKey(0) & 0xFF
+            cv2.destroyAllWindows()
+            if key == 27:  # ESC
+                print("[X] Dihentikan oleh pengguna.")
+                return
+
 if __name__ == '__main__':
-    img_path = 'dataset/logam/contoh1.jpg'  # Ganti dengan path gambar logam
-    image = cv2.imread(img_path)
-
-    if image is None:
-        print("Gambar tidak ditemukan!")
-        exit()
-
-    fitur, gray, laplacian_abs, threshold = ekstraksi_fitur_logam(image)
-    gambar_kontur = gambar_kontur_logam(cv2.resize(image, (300, 300)), cv2.resize(threshold, (300, 300)))
-
-    print("\nFitur Logam Terdeteksi:")
-    for k, v in fitur.items():
-        print(f"{k}: {v:.2f}")
-
-    # ---------- SIMPAN KE CSV ----------
-    output_csv = 'fitur_logam_dataset.csv'
-    df_fitur = pd.DataFrame([fitur])
-    df_fitur.insert(0, 'nama_file', os.path.basename(img_path))
-
-    if not os.path.isfile(output_csv):
-        df_fitur.to_csv(output_csv, index=False)
-    else:
-        df_fitur.to_csv(output_csv, mode='a', header=False, index=False)
-
-    print(f"Fitur berhasil disimpan ke dalam file: {output_csv}")
-
-    # ---------- VISUALISASI ----------
-    img_asli = cv2.resize(image, (300, 300))
-    gray = cv2.resize(gray, (300, 300))
-    laplacian_vis = cv2.resize(laplacian_abs, (300, 300))
-    threshold = cv2.resize(threshold, (300, 300))
-
-    cv2.putText(img_asli, "Gambar Asli", (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,255,0), 2)
-    cv2.putText(gray, "Grayscale", (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, 255, 2)
-    cv2.putText(laplacian_vis, "Laplacian (Pantulan)", (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, 255, 2)
-    cv2.putText(threshold, "Threshold Area Terang", (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, 255, 2)
-    cv2.putText(gambar_kontur, "Deteksi Logam (Kontur)", (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,0,255), 2)
-
-    atas = np.hstack([img_asli, cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)])
-    tengah = np.hstack([cv2.cvtColor(laplacian_vis, cv2.COLOR_GRAY2BGR),
-                        cv2.cvtColor(threshold, cv2.COLOR_GRAY2BGR)])
-    bawah = np.hstack([gambar_kontur, np.zeros_like(gambar_kontur)])
-
-    final_vis = np.vstack([atas, tengah, bawah])
-
-    cv2.imshow("Deteksi Sampah Logam - Ekstraksi + Kontur", final_vis)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
+    proses_folder_logam()
