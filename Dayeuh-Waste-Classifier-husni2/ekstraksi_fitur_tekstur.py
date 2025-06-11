@@ -35,9 +35,21 @@ def tampilkan_proses_glcm(image_bgr):
     _, thresh = cv2.threshold(blur, 180, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
     thresh_resized = cv2.resize(thresh, (300, 300))
     kosong = np.zeros_like(asli)
+
+    # Tambahkan teks label pada tiap citra
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = 0.6
+    color = (0, 255, 0)
+    thickness = 2
+
+    cv2.putText(asli, 'Citra Asli', (10, 25), font, font_scale, color, thickness)
+    cv2.putText(gray_resized, 'Grayscale', (10, 25), font, font_scale, color, thickness)
+    cv2.putText(thresh_resized, 'Thresholding', (10, 25), font, font_scale, color, thickness)
+
     atas = np.hstack([asli, cv2.cvtColor(gray_resized, cv2.COLOR_GRAY2BGR)])
     bawah = np.hstack([cv2.cvtColor(thresh_resized, cv2.COLOR_GRAY2BGR), kosong])
     return np.vstack([atas, bawah])
+
 
 def tampilkan_proses_lbp(image_bgr, lbp_img):
     gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
@@ -46,10 +58,20 @@ def tampilkan_proses_lbp(image_bgr, lbp_img):
     lbp_vis = cv2.normalize(lbp_img, None, 0, 255, cv2.NORM_MINMAX).astype('uint8')
     lbp_vis = cv2.resize(lbp_vis, (300, 300))
 
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = 0.6
+    color = (0, 255, 0)
+    thickness = 2
+
+    cv2.putText(asli, 'Citra Asli', (10, 25), font, font_scale, color, thickness)
+    cv2.putText(gray, 'Grayscale', (10, 25), font, font_scale, color, thickness)
+    cv2.putText(lbp_vis, 'LBP', (10, 25), font, font_scale, color, thickness)
+
     baris_atas = np.hstack([asli, cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)])
     baris_bawah = np.hstack([cv2.cvtColor(lbp_vis, cv2.COLOR_GRAY2BGR), np.zeros_like(asli)])
 
     return np.vstack([baris_atas, baris_bawah])
+
 
 def tampilkan_histogram_lbp_matplotlib(hist_data, title):
     plt.figure(figsize=(8, 4))
