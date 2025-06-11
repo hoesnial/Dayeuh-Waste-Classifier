@@ -6,12 +6,12 @@ Program ini melakukan deteksi dan klasifikasi objek berdasarkan fitur warna, ben
 
 ## 🔧 Cara Penggunaan 
 ```
-// Cloning peroject nya
+// Cloning project nya
 
 git clone https://github.com/hoesnial/Dayeuh-Waste-Classifier.git
 ```
 ```
-// Install Library-library yang akan digunakan satu persatu
+// Install Library-library yang akan dibutuhkan satu persatu
 
 pip install opencv-python
 pip install matplotlib
@@ -44,3 +44,7 @@ Tujuan dari proyek ini adalah untuk membangun sebuah sistem klasifikasi objek pa
 - Mengembangkan pipeline sederhana namun efektif untuk sistem klasifikasi citra berbasis pembelajaran mesin.
 
 - Memberikan antarmuka interaktif yang memungkinkan pengguna memilih area objek secara manual (ROI) untuk analisis langsung.
+
+---
+
+Hasil Ekstraksi 
