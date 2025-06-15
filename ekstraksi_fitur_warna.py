@@ -5,74 +5,65 @@ import pandas as pd
 from skimage.feature import graycomatrix, graycoprops, local_binary_pattern
 import matplotlib.pyplot as plt
 
-# ====== Ekstraksi Tekstur GLCM ======
-def ekstraksi_fitur_glcm(image_gray):
-    image_gray = cv2.normalize(image_gray, None, 0, 255, cv2.NORM_MINMAX).astype('uint8')
-    glcm = graycomatrix(image_gray, distances=[1], angles=[0, np.pi/4, np.pi/2, 3*np.pi/4],
-                        levels=256, symmetric=True, normed=True)
+def ekstraksi_warna_presisi(image):
+    lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
+    L, A, B = cv2.split(lab)
+    mean_L, std_L = np.mean(L), np.std(L)
+    mean_A, std_A = np.mean(A), np.std(A)
+    mean_B, std_B = np.mean(B), np.std(B)
+    fitur = np.array([mean_L, std_L, mean_A, std_A, mean_B, std_B])
+    return fitur, L, A, B 
+
+def ekstraksi_hsv_mean_hist(image):
+    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    H, S, V = cv2.split(hsv)
+    mean_H, mean_S, mean_V = np.mean(H), np.mean(S), np.mean(V)
     
-    fitur = []
-    props = ['contrast', 'dissimilarity', 'homogeneity', 'energy', 'correlation', 'ASM']
-    for prop in props:
-        nilai = graycoprops(glcm, prop)
-        fitur.extend(np.mean(nilai, axis=1))  # rata-rata dari 4 arah
+    hist_H = cv2.calcHist([H], [0], None, [256], [0,256])
+    hist_S = cv2.calcHist([S], [0], None, [256], [0,256])
+    hist_V = cv2.calcHist([V], [0], None, [256], [0,256])
+    
+    hist_H = hist_H / hist_H.max()
+    hist_S = hist_S / hist_S.max()
+    hist_V = hist_V / hist_V.max()
+    
+    fitur = np.array([mean_H, mean_S, mean_V])
+    return fitur, H, S, V, hist_H, hist_S, hist_V
 
-    return np.array(fitur)
+def tampilkan_gambar_dengan_teks(judul, image, mean_std):
+    img = cv2.resize(image, (300, 300))
+    teks = f"{judul}\nMean: {mean_std[0]:.2f} | Std: {mean_std[1]:.2f}" if len(mean_std) == 2 else f"{judul}\nMean: {mean_std[0]:.2f}"
+    y0, dy = 20, 25
+    for i, line in enumerate(teks.split('\n')):
+        y = y0 + i * dy
+        cv2.putText(img, line, (10, y), cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5, (255, 255, 255), 1)
+    return img
 
-# ====== Ekstraksi Tekstur LBP ======
-def ekstraksi_fitur_lbp(image_gray, radius=1, n_points=8):
-    lbp = local_binary_pattern(image_gray, n_points, radius, method="uniform")
-    (hist, _) = np.histogram(lbp.ravel(),
-                              bins=np.arange(0, n_points + 3),
-                              range=(0, n_points + 2))
-    hist = hist.astype("float")
-    hist /= (hist.sum() + 1e-6)
-    return lbp.astype("uint8"), hist
+def plot_histogram_gambar(hist, title, color):
+    plt.figure(figsize=(4,3))
+    plt.plot(hist, color=color)
+    plt.title(title)
+    plt.xlim([0, 256])
+    plt.tight_layout()
 
-# ====== Visualisasi Proses GLCM ======
-def tampilkan_proses_glcm(image_bgr):
-    asli = cv2.resize(image_bgr, (300, 300))
-    gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
-    gray_resized = cv2.resize(gray, (300, 300))
+    # Konversi ke image (numpy array)
+    plt.savefig("temp.png")
+    plt.close()
+    img = cv2.imread("temp.png")
+    os.remove("temp.png")
+    return img
 
-    blur = cv2.GaussianBlur(gray, (5, 5), 0)
-    _, thresh = cv2.threshold(blur, 180, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
-    thresh_resized = cv2.resize(thresh, (300, 300))
-
-    kontur_img = image_bgr.copy()
-    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    cv2.drawContours(kontur_img, contours, -1, (0, 255, 0), 2)
-    kontur_img = cv2.resize(kontur_img, (300, 300))
-
-    atas = np.hstack([asli, cv2.cvtColor(gray_resized, cv2.COLOR_GRAY2BGR)])
-    bawah = np.hstack([cv2.cvtColor(thresh_resized, cv2.COLOR_GRAY2BGR), kontur_img])
-    gabungan = np.vstack([atas, bawah])
-    return gabungan
-
-# ====== Visualisasi Proses LBP ======
-def tampilkan_proses_lbp(image_bgr, lbp_image):
-    asli = cv2.resize(image_bgr, (300, 300))
-    gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
-    gray_resized = cv2.resize(gray, (300, 300))
-    lbp_vis = cv2.resize(lbp_image, (300, 300))
-
-    gabung = np.hstack([
-        cv2.cvtColor(gray_resized, cv2.COLOR_GRAY2BGR),
-        cv2.cvtColor(lbp_vis, cv2.COLOR_GRAY2BGR)
-    ])
-    return np.vstack([asli, gabung])
-
-# ====== Proses Ekstraksi Dataset ======
-def ekstrak_visual_dataset(folder_dataset, output_csv='fitur_tekstur_plastik.csv'):
-    data_fitur = []
-    folder_plastik = os.path.join(folder_dataset, 'plastik')
-
-    if not os.path.exists(folder_plastik):
-        print(f"[!] Folder tidak ditemukan: {folder_plastik}")
+def proses_kertas_polos_berwarna(folder_kertas):
+    if not os.path.exists(folder_kertas):
+        print(f"[!] Folder tidak ditemukan: {folder_kertas}")
         return
 
-    for nama_file in os.listdir(folder_plastik):
-        path_gambar = os.path.join(folder_plastik, nama_file)
+    output_dir = 'hasil_ekstraksi/kertas'
+    os.makedirs(output_dir, exist_ok=True)
+
+    for nama_file in os.listdir(folder_kertas):
+        path_gambar = os.path.join(folder_kertas, nama_file)
         img = cv2.imread(path_gambar)
 
         if img is None:
@@ -80,32 +71,78 @@ def ekstrak_visual_dataset(folder_dataset, output_csv='fitur_tekstur_plastik.csv
             continue
 
         img = cv2.resize(img, (300, 300))
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        fitur_lab, L, A, B = ekstraksi_warna_presisi(img)
+        stds = [np.std(L), np.std(A), np.std(B)]
+        total_std = sum(stds)
+        tipe_kertas = "Polos" if total_std < 10 else "Berwarna"
 
-        # === Ekstraksi GLCM ===
-        fitur_glcm = ekstraksi_fitur_glcm(gray)
+        mean_std_L = (np.mean(L), np.std(L))
+        mean_std_A = (np.mean(A), np.std(A))
+        mean_std_B = (np.mean(B), np.std(B))
 
-        # === Ekstraksi LBP ===
-        lbp_img, fitur_lbp = ekstraksi_fitur_lbp(gray)
+        vis_L = tampilkan_gambar_dengan_teks("Kanal L", L, mean_std_L)
+        vis_A = tampilkan_gambar_dengan_teks("Kanal A", A, mean_std_A)
+        vis_B = tampilkan_gambar_dengan_teks("Kanal B", B, mean_std_B)
 
-        # Gabungkan fitur
-        fitur_total = list(fitur_glcm) + list(fitur_lbp) + [0]  # Label plastik = 0
-        data_fitur.append(fitur_total)
+        hist_A = cv2.calcHist([A], [0], None, [256], [0,256])
+        hist_B = cv2.calcHist([B], [0], None, [256], [0,256])
+        hist_A = hist_A / hist_A.sum()
+        hist_B = hist_B / hist_B.sum()
 
-        # === Tampilkan Visualisasi GLCM ===
-        visual_glcm = tampilkan_proses_glcm(img)
-        cv2.imshow("Proses GLCM - Sampah Plastik", visual_glcm)
+        fitur_hsv, H, S, V, hist_H, hist_S, hist_V = ekstraksi_hsv_mean_hist(img)
+        mean_H = np.mean(H)
+        mean_S = np.mean(S)
+        mean_V = np.mean(V)
 
-        # === Tampilkan Visualisasi LBP ===
-        visual_lbp = tampilkan_proses_lbp(img, lbp_img)
-        cv2.imshow("Proses LBP - Sampah Plastik", visual_lbp)
+        vis_H = tampilkan_gambar_dengan_teks("Kanal H", H, (mean_H,))
+        vis_S = tampilkan_gambar_dengan_teks("Kanal S", S, (mean_S,))
+        vis_V = tampilkan_gambar_dengan_teks("Kanal V", V, (mean_V,))
 
-        print(f"[•] {nama_file} — Tekan tombol untuk lanjut, ESC untuk keluar...")
-        key = cv2.waitKey(0)
-        if key == 27:
-            print("[!] Proses dihentikan oleh pengguna.")
-            break
+        img_asli = img.copy()
+        cv2.putText(img_asli, f"{nama_file} ({tipe_kertas})", (10, 25),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+
+        atas_lab = np.hstack([img_asli, cv2.cvtColor(vis_L, cv2.COLOR_GRAY2BGR)])
+        bawah_lab = np.hstack([cv2.cvtColor(vis_A, cv2.COLOR_GRAY2BGR),
+                               cv2.cvtColor(vis_B, cv2.COLOR_GRAY2BGR)])
+        gabung_lab = np.vstack([atas_lab, bawah_lab])
+
+        atas_hsv = np.hstack([img_asli, cv2.cvtColor(vis_H, cv2.COLOR_GRAY2BGR)])
+        bawah_hsv = np.hstack([cv2.cvtColor(vis_S, cv2.COLOR_GRAY2BGR),
+                               cv2.cvtColor(vis_V, cv2.COLOR_GRAY2BGR)])
+        gabung_hsv = np.vstack([atas_hsv, bawah_hsv])
+
+        # Simpan LAB dan HSV Visual
+        nama_file_no_ext = os.path.splitext(nama_file)[0]
+        path_lab = os.path.join(output_dir, f"{nama_file_no_ext}_LAB.jpg")
+        path_hsv = os.path.join(output_dir, f"{nama_file_no_ext}_HSV.jpg")
+        cv2.imwrite(path_lab, gabung_lab)
+        cv2.imwrite(path_hsv, gabung_hsv)
+
+        print(f"[OK] {nama_file} -> Kertas {tipe_kertas} | Total Std Dev LAB: {total_std:.2f}")
+
+        # Tampilkan semua hasil
+        cv2.imshow("Visual LAB", gabung_lab)
+        cv2.imshow("Visual HSV", gabung_hsv)
+
+        hist_lab_img = np.hstack([
+            plot_histogram_gambar(hist_A, "Histogram A (LAB)", 'magenta'),
+            plot_histogram_gambar(hist_B, "Histogram B (LAB)", 'orange')
+        ])
+        hist_hsv_img = np.hstack([
+            plot_histogram_gambar(hist_H, "Histogram Hue", 'red'),
+            plot_histogram_gambar(hist_S, "Histogram Saturation", 'green'),
+            plot_histogram_gambar(hist_V, "Histogram Value", 'blue')
+        ])
+
+        cv2.imshow("Histogram LAB", hist_lab_img)
+        cv2.imshow("Histogram HSV", hist_hsv_img)
+
+        key = cv2.waitKey(0) & 0xFF
         cv2.destroyAllWindows()
+        if key == 27:
+            print("[X] Dihentikan oleh pengguna.")
+            break
 
     # Simpan ke CSV
     kolom_glcm = ['contrast', 'dissimilarity', 'homogeneity', 'energy', 'correlation', 'ASM']
