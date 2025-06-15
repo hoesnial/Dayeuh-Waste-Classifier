@@ -4,10 +4,19 @@ import os
 
 def ekstraksi_fitur_logam(image):
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    _, threshold = cv2.threshold(gray, 180, 255, cv2.THRESH_BINARY)
+    blur = cv2.GaussianBlur(gray, (5, 5), 0)
 
-    contours, _ = cv2.findContours(threshold, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    contours = [cnt for cnt in contours if cv2.contourArea(cnt) > 200]
+    # Adaptive threshold untuk pencahayaan yang tidak merata
+    threshold = cv2.adaptiveThreshold(blur, 255,
+                                      cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                                      cv2.THRESH_BINARY_INV, 11, 2)
+
+    # Operasi morfologi untuk memperbaiki kontur
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+    morphed = cv2.morphologyEx(threshold, cv2.MORPH_CLOSE, kernel)
+
+    contours, _ = cv2.findContours(morphed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours = [cnt for cnt in contours if cv2.contourArea(cnt) > 300]
 
     if contours:
         cnt_terbesar = max(contours, key=cv2.contourArea)
@@ -30,12 +39,12 @@ def ekstraksi_fitur_logam(image):
     for i in range(7):
         fitur[f"hu_moment{i+1}"] = hu_moments_log[i]
 
-    return fitur, gray, threshold
+    return fitur, gray, morphed
 
 def gambar_kontur_logam(image_asli, mask_threshold):
     kontur_img = image_asli.copy()
     contours, _ = cv2.findContours(mask_threshold, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    contours = [cnt for cnt in contours if cv2.contourArea(cnt) > 200]
+    contours = [cnt for cnt in contours if cv2.contourArea(cnt) > 300]
     cv2.drawContours(kontur_img, contours, -1, (0, 0, 255), 2)
     return kontur_img
 
@@ -71,10 +80,9 @@ def proses_folder_logam(folder_path='dataset/logam', output_dir='hasil_ekstraksi
         for k, v in fitur.items():
             print(f"{k}: {v:.4f}")
 
-        # Buat versi anotasi
         vis1 = tampilkan_gambar_dengan_text("Gambar Asli", image_resized)
         vis2 = tampilkan_gambar_dengan_text("Grayscale", gray_resized)
-        vis3 = tampilkan_gambar_dengan_text("Threshold Area Terang", threshold_resized)
+        vis3 = tampilkan_gambar_dengan_text("Threshold Adaptif", threshold_resized)
         vis4 = tampilkan_gambar_dengan_text("Deteksi Kontur Logam", kontur_resized)
 
         nama_dasar = os.path.splitext(filename)[0]
